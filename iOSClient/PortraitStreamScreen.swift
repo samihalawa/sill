@@ -44,6 +44,102 @@ enum HIDKey {
     }
 }
 
+// MARK: - DuoDeck control surface
+
+private enum DuoDeckPadMode: String, CaseIterable, Identifiable {
+    case compact, balanced, full
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .compact: return "Small"
+        case .balanced: return "Medium"
+        case .full: return "Full"
+        }
+    }
+
+    var widthFraction: CGFloat {
+        switch self {
+        case .compact: return 0.42
+        case .balanced: return 0.64
+        case .full: return 1
+        }
+    }
+
+    var heightFraction: CGFloat {
+        switch self {
+        case .compact: return 0.67
+        case .balanced: return 0.88
+        case .full: return 1
+        }
+    }
+}
+
+private struct DuoDeckShortcut: Identifiable {
+    let title: String
+    let symbol: String
+    let key: Character
+    let modifiers: KeyModifiers
+    var id: String { title }
+}
+
+private enum DuoDeckShortcutPreset: String, CaseIterable, Identifiable {
+    case editing, browser, windows, developer
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .editing: return "Editing"
+        case .browser: return "Browsing"
+        case .windows: return "Windows"
+        case .developer: return "Code"
+        }
+    }
+    var shortcuts: [DuoDeckShortcut] {
+        func shortcut(_ title: String, _ symbol: String, _ key: Character,
+                      _ modifiers: KeyModifiers = .command) -> DuoDeckShortcut {
+            DuoDeckShortcut(title: title, symbol: symbol, key: key, modifiers: modifiers)
+        }
+        switch self {
+        case .editing:
+            return [
+                shortcut("Copy", "doc.on.doc", "c"),
+                shortcut("Paste", "doc.on.clipboard", "v"),
+                shortcut("Undo", "arrow.uturn.backward", "z"),
+                shortcut("Find", "magnifyingglass", "f"),
+                shortcut("Switch", "rectangle.on.rectangle", "\t"),
+                shortcut("Search", "sparkle.magnifyingglass", " ")
+            ]
+        case .browser:
+            return [
+                shortcut("Address", "link", "l"),
+                shortcut("New Tab", "plus.square", "t"),
+                shortcut("Reload", "arrow.clockwise", "r"),
+                shortcut("Find", "magnifyingglass", "f"),
+                shortcut("Back", "chevron.left", "["),
+                shortcut("Forward", "chevron.right", "]")
+            ]
+        case .windows:
+            return [
+                shortcut("Switch", "rectangle.on.rectangle", "\t"),
+                shortcut("Close", "xmark.square", "w"),
+                shortcut("Minimize", "minus.square", "m"),
+                shortcut("Overview", "square.grid.2x2", "\u{2191}", .control),
+                shortcut("Space Left", "chevron.left", "\u{2190}", .control),
+                shortcut("Space Right", "chevron.right", "\u{2192}", .control)
+            ]
+        case .developer:
+            return [
+                shortcut("Run", "play.fill", "r"),
+                shortcut("Build", "hammer", "b"),
+                shortcut("Save", "square.and.arrow.down", "s"),
+                shortcut("Find All", "text.magnifyingglass", "f", [.command, .shift]),
+                shortcut("Comment", "text.bubble", "/"),
+                shortcut("Terminal", "terminal", "`")
+            ]
+        }
+    }
+}
+
 // MARK: - Screen
 
 /// Everything the portrait layouts size: the halves at the inner display's size (`.regular`) and at
@@ -139,6 +235,9 @@ struct PortraitMetrics {
 struct PortraitStreamScreen: View {
     @ObservedObject var client: StreamClient
     var metrics: PortraitMetrics = .regular
+    /// Persisted only for the half-folded Duo's programmable lower surface.
+    @AppStorage("DuoDeck.trackpadLayout") private var duoDeckLayout = "compact"
+    @AppStorage("DuoDeck.shortcutPreset") private var duoDeckShortcutPreset = "editing"
     @Binding var drawerOpen: Bool
     @Binding var keyboardShown: Bool
     @Binding var textScale: Double?
@@ -199,7 +298,8 @@ struct PortraitStreamScreen: View {
 
             VStack(spacing: split.controls - half) {
                 picturePane(measured: true).padding(8).frame(height: half)
-                controls(width: size.width).frame(height: size.height - split.controls)
+                controls(width: size.width, duoDeck: duoFold.horizontalBand != nil)
+                    .frame(height: size.height - split.controls)
             }
 
             // Same order as landscape: the dim goes over the stream so a tap with the drawer
@@ -241,15 +341,134 @@ struct PortraitStreamScreen: View {
         }
     }
 
-    private func controls(width: CGFloat) -> some View {
+    private func controls(width: CGFloat, duoDeck: Bool) -> some View {
         VStack(spacing: metrics.rowGap) {
             windowBar(width: width - 2 * metrics.padSide)
             keyRow(.full)
-            trackpad(verticalSpan: nil)
+            if duoDeck {
+                duoDeckSurface(width: width - 2 * metrics.padSide)
+            } else {
+                trackpad(verticalSpan: nil)
+            }
         }
         .padding(.top, metrics.padTop)
         .padding(.horizontal, metrics.padSide)
         .padding(.bottom, metrics.padBottom)
+    }
+
+    /// In laptop posture the fold fixes the picture's physical top half. The bottom
+    /// half is now a configurable control surface: the user chooses the pad's footprint
+    /// and the remaining space becomes a shortcut deck, without changing streaming.
+    private func duoDeckSurface(width: CGFloat) -> some View {
+        let mode = DuoDeckPadMode(rawValue: duoDeckLayout) ?? .compact
+        return VStack(spacing: 9) {
+            HStack(spacing: 10) {
+                HStack(spacing: 5) {
+                    Image(systemName: "hand.draw")
+                        .foregroundStyle(Palette.accent)
+                    Text("DUODECK")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .tracking(1.2)
+                        .foregroundStyle(Palette.text)
+                }
+                .accessibilityLabel("DuoDeck controls")
+
+                Spacer(minLength: 4)
+
+                Picker("Trackpad size", selection: $duoDeckLayout) {
+                    ForEach(DuoDeckPadMode.allCases) { item in
+                        Text(item.title).tag(item.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 288)
+                .accessibilityLabel("Trackpad size")
+            }
+            .frame(height: 34)
+
+            GeometryReader { area in
+                let spacing: CGFloat = 10
+                let padWidth = mode == .full
+                    ? area.size.width
+                    : max(140, (area.size.width - spacing) * mode.widthFraction)
+                let padHeight = mode == .full
+                    ? area.size.height
+                    : max(110, area.size.height * mode.heightFraction)
+
+                HStack(spacing: spacing) {
+                    trackpad(verticalSpan: nil)
+                        .frame(width: padWidth, height: padHeight)
+                        .accessibilityLabel("Mac trackpad")
+
+                    if mode != .full {
+                        duoDeckShortcuts
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var duoDeckShortcuts: some View {
+        let preset = DuoDeckShortcutPreset(rawValue: duoDeckShortcutPreset) ?? .editing
+        let columns = [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)]
+        return VStack(spacing: 6) {
+            HStack(spacing: 4) {
+                Text("ACTIONS")
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundStyle(Palette.muted)
+                Spacer(minLength: 1)
+                Picker("Action preset", selection: $duoDeckShortcutPreset) {
+                    ForEach(DuoDeckShortcutPreset.allCases) { item in
+                        Text(item.title).tag(item.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(Palette.accent)
+                .font(.system(size: 12))
+            }
+            .frame(height: 32)
+
+            LazyVGrid(columns: columns, spacing: 6) {
+                ForEach(preset.shortcuts) { shortcut in
+                    duoDeckButton(shortcut)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func duoDeckButton(_ shortcut: DuoDeckShortcut) -> some View {
+        Button {
+            let hid: UInt16?
+            switch shortcut.key {
+            case "↑": hid = HIDKey.upArrow
+            case "←": hid = HIDKey.leftArrow
+            case "→": hid = HIDKey.rightArrow
+            default: hid = HIDKey.usage(for: shortcut.key)
+            }
+            guard let hid else { return }
+            KeyChord.press(hid, with: shortcut.modifiers).forEach { client.sendFromKeyRow($0) }
+            latched = []
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: shortcut.symbol)
+                    .font(.system(size: 16, weight: .medium))
+                Text(shortcut.title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(Palette.text)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .background(Palette.control, in: RoundedRectangle(cornerRadius: 12))
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Mac shortcut: \(shortcut.title)")
     }
 
     /// The same Apps button and thumbnails as landscape, at the board's tighter size, with no
