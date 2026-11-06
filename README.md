@@ -1,4 +1,16 @@
-# Sill
+# DuoDeck
+
+**A fold-aware Mac control surface for iPhone Duo**, built on the Apache-2.0 open-source [Sill](https://github.com/Saffsanity/sill) engine.
+
+DuoDeck adds adjustable **Small / Medium / Full** trackpad layouts to laptop posture. In compact modes, the lower half becomes a useful command deck with four shortcut profiles: Editing, Browsing, Windows and Code. The Mac video remains above the fold. No system-wide control of arbitrary iPhone apps is claimed.
+
+The iOS app is signed as `com.agentsai.duodeck`. Install the [free compatible Sill for Mac companion](https://getsill.app/download) and pair it with DuoDeck. See [DuoDeck setup](DUODECK.md), [privacy policy](PRIVACY.md) and [App Store release materials](docs/duodeck-app-store.md).
+
+The original Sill documentation is retained below for the streaming engine, troubleshooting and underlying protocols.
+
+---
+
+## Upstream Sill foundation
 
 Any window from your Mac, on your iPhone and iPad.
 
