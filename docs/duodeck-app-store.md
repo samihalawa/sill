@@ -1,5 +1,7 @@
 # DuoDeck — App Store Connect release materials
 
+> Historical draft for the Sill fork. See the [standalone DuoDeck release checklist](https://github.com/samihalawa/2026-CODEX-DuoDeck/blob/main/docs/release-checklist.md) for current release work.
+
 Release: 1.0.0 (1). Platform: iOS (iPhone and iPad; iPhone Duo optimized). Bundle ID: `com.agentsai.duodeck`. Developer team: Agents AI Ltd. (`U549N38BV6`).
 
 ## Identity
@@ -53,26 +55,16 @@ Mac companion: https://getsill.app/download
 
 ## Review notes
 
-The iPhone app is named DuoDeck; the optional macOS companion is the independently available Sill for Mac application, which communicates via Sill's existing protocol. To test on a Mac running Sill, authorize Screen Recording and Accessibility in macOS Settings and pair the iPhone/iPad. For Duo laptop posture: open the iPhone Duo halfway, choose Small or Medium trackpad at the bottom, and use the action preset selector.
+The iPhone app is named DuoDeck. To test with Sill for Mac, grant the companion Screen Recording and Accessibility permissions in macOS Settings and pair the iPhone or iPad. On an iPhone Duo opened halfway, choose a size in the **Trackpad** menu and change the shortcut group under **Shortcuts** › **Preset**.
 
 On ordinary iPhones or iPads the inherited layouts are shown. The app requests Local Network access to discover Macs, and Camera access only to scan a pairing code. No account is required. The client has no analytics or ads.
 
 ## Screenshots to produce before App Store review
 
 - A genuine running Mac window above the fold and DuoDeck Small trackpad plus shortcut deck below the fold; image must be captured from a real connection (no mocked content presented as live).
-- The Medium and Full presets in laptop posture.
+- The Medium and Full trackpad sizes in laptop posture.
 - Editing and Browsing action profiles with the actual Mac companion.
 - Closed device and fully open Duo compatibility views.
 
 Prepare product page graphics using Apple's current screenshot sizes for iPhone Duo / iPhone, and verify legibility across orientations. Only submit the screenshots of features demonstrated in the uploaded binary.
-
-## Release instructions
-
-1. Merge validated feature branch; public privacy policy must resolve at the URL above.
-2. In App Store Connect, create the DuoDeck iOS app record (name, SKU `DUODECK2026IOS001`, `com.agentsai.duodeck`) under Agents AI Ltd.
-3. Set pricing and app information, age rating, privacy answers, support links and screenshots.
-4. Upload the archived signed IPA generated with `Packaging/ExportOptions-duodeck.plist`.
-5. Wait until Apple processes the build; attach build 1.0.0 (1) to the version, fill review metadata, and submit for review. Confirm the submission state in App Store Connect. Do not claim publication from an upload or a submitted review alone.
-
-The signing key and any App Store Connect secrets remain outside this repository.
 

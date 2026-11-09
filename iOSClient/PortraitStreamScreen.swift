@@ -81,6 +81,15 @@ private struct DuoDeckShortcut: Identifiable {
     let key: Character
     let modifiers: KeyModifiers
     var id: String { title }
+
+    var usage: UInt16? {
+        switch key {
+        case "↑": return HIDKey.upArrow
+        case "←": return HIDKey.leftArrow
+        case "→": return HIDKey.rightArrow
+        default: return HIDKey.usage(for: key)
+        }
+    }
 }
 
 private enum DuoDeckShortcutPreset: String, CaseIterable, Identifiable {
@@ -105,9 +114,9 @@ private enum DuoDeckShortcutPreset: String, CaseIterable, Identifiable {
                 shortcut("Copy", "doc.on.doc", "c"),
                 shortcut("Paste", "doc.on.clipboard", "v"),
                 shortcut("Undo", "arrow.uturn.backward", "z"),
-                shortcut("Find", "magnifyingglass", "f"),
-                shortcut("Switch", "rectangle.on.rectangle", "\t"),
-                shortcut("Search", "sparkle.magnifyingglass", " ")
+                shortcut("Redo", "arrow.uturn.forward", "z", [.command, .shift]),
+                shortcut("Select All", "selection.pin.in.out", "a"),
+                shortcut("Find", "magnifyingglass", "f")
             ]
         case .browser:
             return [
@@ -120,10 +129,10 @@ private enum DuoDeckShortcutPreset: String, CaseIterable, Identifiable {
             ]
         case .windows:
             return [
-                shortcut("Switch", "rectangle.on.rectangle", "\t"),
+                shortcut("Switch Apps", "rectangle.on.rectangle", "\t"),
                 shortcut("Close", "xmark.square", "w"),
                 shortcut("Minimize", "minus.square", "m"),
-                shortcut("Overview", "square.grid.2x2", "\u{2191}", .control),
+                shortcut("Mission Control", "square.grid.2x2", "\u{2191}", .control),
                 shortcut("Space Left", "chevron.left", "\u{2190}", .control),
                 shortcut("Space Right", "chevron.right", "\u{2192}", .control)
             ]
@@ -134,7 +143,7 @@ private enum DuoDeckShortcutPreset: String, CaseIterable, Identifiable {
                 shortcut("Save", "square.and.arrow.down", "s"),
                 shortcut("Find All", "text.magnifyingglass", "f", [.command, .shift]),
                 shortcut("Comment", "text.bubble", "/"),
-                shortcut("Terminal", "terminal", "`")
+                shortcut("Next Window", "rectangle.on.rectangle", "`")
             ]
         }
     }
@@ -238,6 +247,7 @@ struct PortraitStreamScreen: View {
     /// Persisted only for the half-folded Duo's programmable lower surface.
     @AppStorage("DuoDeck.trackpadLayout") private var duoDeckLayout = "compact"
     @AppStorage("DuoDeck.shortcutPreset") private var duoDeckShortcutPreset = "editing"
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var drawerOpen: Bool
     @Binding var keyboardShown: Bool
     @Binding var textScale: Double?
@@ -346,7 +356,7 @@ struct PortraitStreamScreen: View {
             windowBar(width: width - 2 * metrics.padSide)
             keyRow(.full)
             if duoDeck {
-                duoDeckSurface(width: width - 2 * metrics.padSide)
+                duoDeckSurface
             } else {
                 trackpad(verticalSpan: nil)
             }
@@ -356,53 +366,81 @@ struct PortraitStreamScreen: View {
         .padding(.bottom, metrics.padBottom)
     }
 
-    /// In laptop posture the fold fixes the picture's physical top half. The bottom
-    /// half is now a configurable control surface: the user chooses the pad's footprint
-    /// and the remaining space becomes a shortcut deck, without changing streaming.
-    private func duoDeckSurface(width: CGFloat) -> some View {
+    /// The controls stay below the fold. The menu is always available; direct shortcut
+    /// buttons appear only when all of their touch targets fit beside the selected pad.
+    private var duoDeckSurface: some View {
         let mode = DuoDeckPadMode(rawValue: duoDeckLayout) ?? .compact
-        return VStack(spacing: 9) {
-            HStack(spacing: 10) {
-                HStack(spacing: 5) {
-                    Image(systemName: "hand.draw")
-                        .foregroundStyle(Palette.accent)
-                    Text("DUODECK")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .tracking(1.2)
-                        .foregroundStyle(Palette.text)
-                }
-                .accessibilityLabel("DuoDeck controls")
+        let preset = DuoDeckShortcutPreset(rawValue: duoDeckShortcutPreset) ?? .editing
+        let shortcuts = preset.shortcuts
+        let gap: CGFloat = 8
+        let buttonHeight: CGFloat = 48
+        let columns = 2
+        let rows = (shortcuts.count + columns - 1) / columns
+        let gridHeight = CGFloat(rows) * buttonHeight + CGFloat(max(0, rows - 1)) * gap
 
-                Spacer(minLength: 4)
-
-                Picker("Trackpad size", selection: $duoDeckLayout) {
-                    ForEach(DuoDeckPadMode.allCases) { item in
-                        Text(item.title).tag(item.rawValue)
+        return VStack(spacing: gap) {
+            HStack(spacing: gap) {
+                Menu {
+                    Picker("Trackpad size", selection: $duoDeckLayout) {
+                        ForEach(DuoDeckPadMode.allCases) { item in
+                            Text(item.title).tag(item.rawValue)
+                        }
                     }
+                } label: {
+                    duoDeckMenuLabel("Trackpad: \(mode.title)", symbol: "hand.draw")
                 }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 288)
                 .accessibilityLabel("Trackpad size")
+                .accessibilityValue(mode.title)
+
+                Menu {
+                    Picker("Preset", selection: $duoDeckShortcutPreset) {
+                        ForEach(DuoDeckShortcutPreset.allCases) { item in
+                            Text(item.title).tag(item.rawValue)
+                        }
+                    }
+                    Section(preset.title) {
+                        ForEach(shortcuts) { shortcut in
+                            Button {
+                                sendDuoDeckShortcut(shortcut)
+                            } label: {
+                                Label(shortcut.title, systemImage: shortcut.symbol)
+                            }
+                        }
+                    }
+                } label: {
+                    duoDeckMenuLabel("Shortcuts", symbol: "command")
+                }
+                .accessibilityLabel("Mac shortcuts")
+                .accessibilityValue(preset.title)
             }
-            .frame(height: 34)
+            .menuStyle(.borderlessButton)
 
             GeometryReader { area in
-                let spacing: CGFloat = 10
+                let width = area.size.width
+                let height = area.size.height
                 let padWidth = mode == .full
-                    ? area.size.width
-                    : max(140, (area.size.width - spacing) * mode.widthFraction)
+                    ? width
+                    : min(width, max(140, (width - gap) * mode.widthFraction))
                 let padHeight = mode == .full
-                    ? area.size.height
-                    : max(110, area.size.height * mode.heightFraction)
+                    ? height
+                    : min(height, max(110, height * mode.heightFraction))
+                let deckWidth = width - padWidth - gap
+                let showGrid = mode != .full && !dynamicTypeSize.isAccessibilitySize
+                    && deckWidth >= 2 * 94 + gap && height >= gridHeight
 
-                HStack(spacing: spacing) {
+                HStack(spacing: gap) {
                     trackpad(verticalSpan: nil)
                         .frame(width: padWidth, height: padHeight)
                         .accessibilityLabel("Mac trackpad")
 
-                    if mode != .full {
-                        duoDeckShortcuts
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if showGrid {
+                        let items = Array(repeating: GridItem(.flexible(), spacing: gap), count: columns)
+                        LazyVGrid(columns: items, spacing: gap) {
+                            ForEach(shortcuts) { shortcut in
+                                duoDeckButton(shortcut, height: buttonHeight)
+                            }
+                        }
+                        .frame(width: deckWidth)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -411,48 +449,27 @@ struct PortraitStreamScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var duoDeckShortcuts: some View {
-        let preset = DuoDeckShortcutPreset(rawValue: duoDeckShortcutPreset) ?? .editing
-        let columns = [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)]
-        return VStack(spacing: 6) {
-            HStack(spacing: 4) {
-                Text("ACTIONS")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(0.8)
-                    .foregroundStyle(Palette.muted)
-                Spacer(minLength: 1)
-                Picker("Action preset", selection: $duoDeckShortcutPreset) {
-                    ForEach(DuoDeckShortcutPreset.allCases) { item in
-                        Text(item.title).tag(item.rawValue)
-                    }
-                }
-                .pickerStyle(.menu)
-                .tint(Palette.accent)
-                .font(.system(size: 12))
-            }
-            .frame(height: 32)
-
-            LazyVGrid(columns: columns, spacing: 6) {
-                ForEach(preset.shortcuts) { shortcut in
-                    duoDeckButton(shortcut)
-                }
-            }
-            Spacer(minLength: 0)
-        }
+    private func duoDeckMenuLabel(_ title: String, symbol: String) -> some View {
+        Label(title, systemImage: symbol)
+            .font(.subheadline.weight(.semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .foregroundStyle(Palette.text)
+            .background(Palette.control, in: RoundedRectangle(cornerRadius: 12))
+            .contentShape(Rectangle())
     }
 
-    private func duoDeckButton(_ shortcut: DuoDeckShortcut) -> some View {
+    private func sendDuoDeckShortcut(_ shortcut: DuoDeckShortcut) {
+        guard let usage = shortcut.usage else { return }
+        KeyChord.press(usage, with: shortcut.modifiers).forEach { client.sendFromKeyRow($0) }
+        latched = []
+    }
+
+    private func duoDeckButton(_ shortcut: DuoDeckShortcut, height: CGFloat) -> some View {
         Button {
-            let hid: UInt16?
-            switch shortcut.key {
-            case "↑": hid = HIDKey.upArrow
-            case "←": hid = HIDKey.leftArrow
-            case "→": hid = HIDKey.rightArrow
-            default: hid = HIDKey.usage(for: shortcut.key)
-            }
-            guard let hid else { return }
-            KeyChord.press(hid, with: shortcut.modifiers).forEach { client.sendFromKeyRow($0) }
-            latched = []
+            sendDuoDeckShortcut(shortcut)
         } label: {
             VStack(spacing: 4) {
                 Image(systemName: shortcut.symbol)
@@ -463,7 +480,8 @@ struct PortraitStreamScreen: View {
                     .minimumScaleFactor(0.8)
             }
             .foregroundStyle(Palette.text)
-            .frame(maxWidth: .infinity, minHeight: 48)
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
             .background(Palette.control, in: RoundedRectangle(cornerRadius: 12))
             .contentShape(RoundedRectangle(cornerRadius: 12))
         }
